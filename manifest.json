@@ -4,5 +4,14 @@
   "editorType": ["figma"],
   "api": "1.0.0",
   "main": "dist/code.js",
-  "ui": "dist/ui.html"
+  "ui": "dist/ui.html",
+  "networkAccess": {
+    "allowedDomains": [
+      "https://corsproxy.io",
+      "https://api.allorigins.win",
+      "https://cors-anywhere.herokuapp.com",
+      "*"
+    ],
+    "reasoning": "The plugin needs to fetch style information from user-provided websites to extract colors, fonts, and other design elements. The wildcard is needed to allow users to scan any website for style information."
+  }
 }
