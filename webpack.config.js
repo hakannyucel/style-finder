@@ -1,5 +1,7 @@
 const path = require('path');
-const CopyPlugin = require('copy-webpack-plugin');
+const HtmlWebpackPlugin = require('html-webpack-plugin');
+const MiniCssExtractPlugin = require('mini-css-extract-plugin');
+const HtmlInlineScriptPlugin = require('html-inline-script-webpack-plugin');
 
 module.exports = {
   entry: {
@@ -12,6 +14,20 @@ module.exports = {
         test: /\.ts$/,
         use: 'ts-loader',
         exclude: /node_modules/
+      },
+      {
+        test: /\.css$/,
+        use: [
+          'style-loader',
+          'css-loader'
+        ]
+      },
+      {
+        test: /\.(png|jpg|jpeg|gif|svg)$/,
+        type: 'asset/resource',
+        generator: {
+          filename: 'images/[name][ext]'
+        }
       }
     ]
   },
@@ -20,14 +36,24 @@ module.exports = {
   },
   output: {
     filename: '[name].js',
-    path: path.resolve(__dirname, 'dist')
+    path: path.resolve(__dirname, 'dist'),
+    clean: true
   },
   plugins: [
-    new CopyPlugin({
-      patterns: [
-        { from: './src/ui.html', to: './ui.html' },
-        { from: './src/header.jpg', to: './header.jpg' }
-      ]
+    new HtmlWebpackPlugin({
+      template: './src/ui.html',
+      filename: 'ui.html',
+      inject: 'body',
+      minify: false,
+      chunks: ['ui']
+    }),
+    new MiniCssExtractPlugin({
+      filename: '[name].css'
+    }),
+    new HtmlInlineScriptPlugin({
+      tests: [/ui\.js$/]
     })
-  ]
+  ],
+  devtool: 'source-map',
+  mode: 'production'
 };
