@@ -1,0 +1,8 @@
+{
+  "name": "Style Finder",
+  "id": "unique-style-finder-plugin-id",
+  "editorType": ["figma"],
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "dist/ui.html"
+}
