@@ -2,6 +2,7 @@ const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const HtmlInlineScriptPlugin = require('html-inline-script-webpack-plugin');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 
 module.exports = {
   entry: {
@@ -52,6 +53,14 @@ module.exports = {
     }),
     new HtmlInlineScriptPlugin({
       tests: [/ui\.js$/]
+    }),
+    new CopyWebpackPlugin({
+      patterns: [
+        { 
+          from: 'assets', 
+          to: 'assets' 
+        }
+      ]
     })
   ],
   devtool: 'source-map',
