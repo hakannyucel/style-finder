@@ -2,6 +2,9 @@
 // __html__ variable is automatically injected by Figma
 // We're removing this line because it's already defined
 
+// Only keep this import from colorUtils
+import { getColorName } from './colorUtils';
+
 // Interface definition for style data
 interface StyleData {
   colors: string[];
@@ -38,6 +41,7 @@ async function extractStylesFromUrl(url: string): Promise<StyleData> {
   // Try each proxy in sequence
   for (let i = 0; i < corsProxies.length; i++) {
     try {
+      console.log(`CORS proxy ${i+1} successful:`, corsProxies[i](url));
       const proxyUrl = corsProxies[i](url);
       
       const response = await fetch(proxyUrl, {
@@ -56,11 +60,11 @@ async function extractStylesFromUrl(url: string): Promise<StyleData> {
       
       break;
     } catch (error) {
-      console.error(`CORS proxy ${i+1} başarısız:`, error);
+      console.error(`CORS proxy ${i+1} failed:`, error);
       lastError = error instanceof Error ? error : new Error(String(error));
       
       if (i === corsProxies.length - 1) {
-        throw new Error(`Tüm CORS proxy'ler başarısız oldu: ${lastError.message}`);
+        throw new Error(`All CORS proxy's failed: ${lastError.message}`);
       }
       
       continue;
@@ -77,6 +81,9 @@ async function extractStylesFromUrl(url: string): Promise<StyleData> {
   // Regex for extracting color information (hex color codes)
   const colorRegex = /#(?:[0-9a-fA-F]{3}){1,2}\b/g;
   const colors = html.match(colorRegex) || [];
+  
+  // Convert all hex colors to uppercase
+  const uppercaseHexColors = colors.map(color => ensureHexUppercase(color));
 
   // Additional regex for RGB and RGBA color codes
   const rgbRegex = /rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)/gi;
@@ -84,6 +91,24 @@ async function extractStylesFromUrl(url: string): Promise<StyleData> {
   
   const rgbColors = html.match(rgbRegex) || [];
   const rgbaColors = html.match(rgbaRegex) || [];
+
+  // Convert RGB colors to HEX format
+  const convertedRgbColors = rgbColors.map(color => {
+    const rgbMatch = color.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/i);
+    if (rgbMatch) {
+      return rgbToHex(parseInt(rgbMatch[1], 10), parseInt(rgbMatch[2], 10), parseInt(rgbMatch[3], 10));
+    }
+    return color;
+  });
+
+  // Convert RGBA colors to HEX format (ignoring alpha)
+  const convertedRgbaColors = rgbaColors.map(color => {
+    const rgbaMatch = color.match(/rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*[\d.]+\s*\)/i);
+    if (rgbaMatch) {
+      return rgbToHex(parseInt(rgbaMatch[1], 10), parseInt(rgbaMatch[2], 10), parseInt(rgbaMatch[3], 10));
+    }
+    return color;
+  });
 
   // Additional checks for CSS color names can be added
   // (black, white, red, etc.)
@@ -117,7 +142,7 @@ async function extractStylesFromUrl(url: string): Promise<StyleData> {
   }
 
   // Combine all colors and remove duplicates
-  const allColors = [...colors, ...rgbColors, ...rgbaColors];
+  const allColors = [...uppercaseHexColors, ...convertedRgbColors, ...convertedRgbaColors];
 
   // Make extracted data unique
   const uniqueColors = [...new Set(allColors)];
@@ -170,6 +195,37 @@ function getPageTitleFromHtml(html: string): string {
   }
 }
 
+// Utility function to convert RGB values to uppercase HEX format
+function rgbToHex(r: number, g: number, b: number): string {
+  // Convert from 0-1 range to 0-255 range if needed
+  const rInt = r <= 1 ? Math.round(r * 255) : Math.round(r);
+  const gInt = g <= 1 ? Math.round(g * 255) : Math.round(g);
+  const bInt = b <= 1 ? Math.round(b * 255) : Math.round(b);
+  
+  // Convert to hex and ensure 2 digits
+  const rHex = rInt.toString(16).padStart(2, '0');
+  const gHex = gInt.toString(16).padStart(2, '0');
+  const bHex = bInt.toString(16).padStart(2, '0');
+  
+  // Return uppercase hex code
+  return `#${rHex}${gHex}${bHex}`.toUpperCase();
+}
+
+// Function to ensure hex codes are uppercase and in 6-digit format
+function ensureHexUppercase(hexColor: string): string {
+  if (!hexColor.startsWith('#')) return hexColor;
+  
+  // Convert 3-digit hex (#RGB) to 6-digit format (#RRGGBB)
+  if (hexColor.length === 4) {
+    hexColor = '#' + 
+      hexColor[1] + hexColor[1] + 
+      hexColor[2] + hexColor[2] + 
+      hexColor[3] + hexColor[3];
+  }
+  
+  return hexColor.toUpperCase();
+}
+
 /**
  * @param styleData Extracted style data
  */
@@ -204,15 +260,25 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
     titleSection.strokes = [{ type: 'SOLID', color: { r: 0.93, g: 0.93, b: 0.93 } }];
     titleSection.strokeAlign = "INSIDE";
 
+    // Add a tooltip or label showing the HEX color value for the stroke
+    const strokeColorHex = rgbToHex(0.93, 0.93, 0.93);
+    titleSection.setRelaunchData({ strokeColor: strokeColorHex });
+
     mainFrame.appendChild(titleSection);
 
     const titleContainer = figma.createFrame();
     titleContainer.name = "Title Container";
     titleContainer.resize(1072, 80);
     titleContainer.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
-    titleContainer.x = 64;
-    titleContainer.y = 64;
-    titleContainer.verticalPadding = 8;
+    
+    // Add a tooltip or label showing the HEX color value for the fill
+    const fillColorHex = rgbToHex(1, 1, 1);
+    titleContainer.setRelaunchData({ fillColor: fillColorHex });
+
+    titleContainer.x = 0;
+    titleContainer.y = 0;
+    titleContainer.verticalPadding = 64;
+    titleContainer.horizontalPadding = 64;
     titleContainer.itemSpacing = 8;
     titleContainer.layoutMode = "VERTICAL";
     titleContainer.primaryAxisSizingMode = "AUTO";
@@ -231,6 +297,11 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
     titleTextTitle.fontSize = 24;
     titleTextTitle.fontName = { family: "Inter", style: "Medium" };
     titleTextTitle.fills = [{ type: 'SOLID', color: { r: 0.07, g: 0.07, b: 0.07 } }];
+    
+    // Add a tooltip or label showing the HEX color value for the text fill
+    const textFillColorHex = rgbToHex(0.07, 0.07, 0.07);
+    titleTextTitle.setRelaunchData({ textColor: textFillColorHex });
+
     titleTextTitle.resize(titleTextTitle.width, titleTextTitle.height);
 
     titleText.resize(titleTextTitle.width, 32);
@@ -336,6 +407,7 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
       colorCardsSection.counterAxisSpacing = 18;
       colorCardsSection.layoutWrap = "WRAP";
       colorCardsSection.fills = [];
+      colorCardsSection.clipsContent = false;
       colorCardsSection.resize(1072, colorCardsSection.height);
       colorsSection.appendChild(colorCardsSection);
 
@@ -343,7 +415,7 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
       for (let i = 0; i < styleData.colors.length; i++) {
         const colorCard = figma.createFrame();
         colorCard.name = `Color Card ${i + 1}`;
-        colorCard.resize(200, 180);
+        colorCard.resize(200, 210);
         colorCard.cornerRadius = 16;
         colorCard.verticalPadding = 4;
         colorCard.horizontalPadding = 4;
@@ -364,6 +436,10 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
 
         colorCard.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
         
+        // Add a tooltip or label showing the HEX color value for the shadow
+        const shadowColorHex = rgbToHex(0.06, 0.1, 0.14);
+        colorCard.setRelaunchData({ shadowColor: shadowColorHex });
+        
         // Add color sample
         const colorSample = figma.createFrame();
         colorSample.name = `Color Sample ${i + 1}`;
@@ -376,6 +452,7 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
         // Parse and apply color value
         const colorValue = styleData.colors[i];
         let colorFill: RGB = { r: 0.95, g: 0.98, b: 0.99 }; // Default color
+        let hexColorValue = "";
         
         // If it's a HEX color code
         if (colorValue.startsWith('#')) {
@@ -385,11 +462,15 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
             const g = parseInt(hex[1] + hex[1], 16) / 255;
             const b = parseInt(hex[2] + hex[2], 16) / 255;
             colorFill = { r, g, b };
+            // Convert 3-digit hex to 6-digit format
+            const expandedHex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+            hexColorValue = `#${expandedHex}`.toUpperCase();
           } else if (hex.length === 6) {
             const r = parseInt(hex.slice(0, 2), 16) / 255;
             const g = parseInt(hex.slice(2, 4), 16) / 255;
             const b = parseInt(hex.slice(4, 6), 16) / 255;
             colorFill = { r, g, b };
+            hexColorValue = `#${hex}`.toUpperCase();
           }
         }
         // If it's an RGB color code
@@ -400,19 +481,36 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
             const g = parseInt(rgbMatch[2], 10) / 255;
             const b = parseInt(rgbMatch[3], 10) / 255;
             colorFill = { r, g, b };
+            hexColorValue = rgbToHex(parseInt(rgbMatch[1], 10), parseInt(rgbMatch[2], 10), parseInt(rgbMatch[3], 10));
           }
         }
         
         colorSample.fills = [{ type: 'SOLID', color: colorFill }];
         colorCard.appendChild(colorSample);
         
-        // Add text showing the color value
+        // Get the hex color value
+        const hexValue = hexColorValue || rgbToHex(colorFill.r, colorFill.g, colorFill.b);
+        
+        // Get the color name from the hex code
+        const colorName = getColorName(hexValue);
+        
+        // Add text showing the color name
+        const colorNameText = figma.createText();
+        colorNameText.characters = colorName;
+        colorNameText.fontSize = 16;
+        colorNameText.fontName = { family: "Inter", style: "Medium" };
+        colorNameText.x = 10;
+        colorNameText.y = 110;
+        colorNameText.textAlignHorizontal = "LEFT";
+        colorCard.appendChild(colorNameText);
+        
+        // Add text showing the color value in HEX format
         const colorText = figma.createText();
-        colorText.characters = colorValue;
+        colorText.characters = hexValue;
         colorText.fontSize = 14;
         colorText.fontName = { family: "Inter", style: "Regular" };
         colorText.x = 10;
-        colorText.y = 110;
+        colorText.y = 130; // Increased Y position to make room for the name
         colorText.textAlignHorizontal = "LEFT";
         colorCard.appendChild(colorText);
         
@@ -426,165 +524,6 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
       
       // Update Y position
       currentY += colorsSection.height;
-    }
-
-    // Create section for font cards
-    if (styleData.fonts.length > 0) {
-      const fontsSection = figma.createFrame();
-      fontsSection.name = "Fonts Section";
-      fontsSection.layoutMode = "HORIZONTAL";
-      fontsSection.primaryAxisSizingMode = "AUTO";
-      fontsSection.counterAxisSizingMode = "AUTO";
-      fontsSection.paddingLeft = 64;
-      fontsSection.paddingRight = 64;
-      fontsSection.paddingTop = 40;
-      fontsSection.paddingBottom = 40;
-      fontsSection.itemSpacing = 20;
-      fontsSection.x = 0;
-      fontsSection.y = currentY; // Position below the previous section
-      fontsSection.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
-      mainFrame.appendChild(fontsSection);
-
-      // Add font title
-      const fontTitle = figma.createText();
-      fontTitle.characters = "FONTS";
-      fontTitle.fontSize = 18;
-      fontTitle.fontName = { family: "Inter", style: "Bold" };
-      fontTitle.x = 64;
-      fontTitle.y = 20;
-      fontsSection.appendChild(fontTitle);
-
-      // Create a card for each font
-      const displayFontCount = Math.min(styleData.fonts.length, 5);
-      for (let i = 0; i < displayFontCount; i++) {
-        const fontCard = figma.createFrame();
-        fontCard.name = `Font Card ${i + 1}`;
-        fontCard.resize(200, 180);
-        fontCard.cornerRadius = 16;
-        fontCard.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
-        
-        // Add font sample
-        const fontSample = figma.createText();
-        fontSample.characters = "Aa Bb Cc";
-        fontSample.fontSize = 24;
-        
-        // Parse font name
-        const fontValue = styleData.fonts[i];
-        const fontName = fontValue.split(',')[0].trim().replace(/['\"]/g, '');
-        
-        try {
-          fontSample.fontName = { family: fontName, style: "Regular" };
-        } catch (e) {
-          fontSample.fontName = { family: "Inter", style: "Regular" };
-        }
-        
-        fontSample.x = 10;
-        fontSample.y = 40;
-        fontCard.appendChild(fontSample);
-        
-        // Add text showing the font name
-        const fontText = figma.createText();
-        fontText.characters = fontName;
-        fontText.fontSize = 14;
-        fontText.fontName = { family: "Inter", style: "Regular" };
-        fontText.x = 10;
-        fontText.y = 110;
-        fontText.textAlignHorizontal = "LEFT";
-        fontCard.appendChild(fontText);
-        
-        fontsSection.appendChild(fontCard);
-      }
-      
-      // Update Y position
-      currentY += fontsSection.height;
-    }
-
-    // Create section for font sizes
-    if (styleData.fontSizes.length > 0) {
-      const fontSizesSection = figma.createFrame();
-      fontSizesSection.name = "Font Sizes Section";
-      fontSizesSection.layoutMode = "HORIZONTAL";
-      fontSizesSection.primaryAxisSizingMode = "AUTO";
-      fontSizesSection.counterAxisSizingMode = "AUTO";
-      fontSizesSection.paddingLeft = 64;
-      fontSizesSection.paddingRight = 64;
-      fontSizesSection.paddingTop = 40;
-      fontSizesSection.paddingBottom = 40;
-      fontSizesSection.itemSpacing = 20;
-      fontSizesSection.x = 0;
-      fontSizesSection.y = currentY; // Position below the previous section
-      fontSizesSection.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
-      mainFrame.appendChild(fontSizesSection);
-
-      // Add font size title
-      const fontSizeTitle = figma.createText();
-      fontSizeTitle.characters = "FONT SIZES";
-      fontSizeTitle.fontSize = 18;
-      fontSizeTitle.fontName = { family: "Inter", style: "Bold" };
-      fontSizeTitle.x = 64;
-      fontSizeTitle.y = 20;
-      fontSizesSection.appendChild(fontSizeTitle);
-
-      // Create a card for each font size
-      const displayFontSizeCount = Math.min(styleData.fontSizes.length, 5);
-      for (let i = 0; i < displayFontSizeCount; i++) {
-        const fontSizeCard = figma.createFrame();
-        fontSizeCard.name = `Font Size Card ${i + 1}`;
-        fontSizeCard.resize(200, 180);
-        fontSizeCard.cornerRadius = 16;
-        fontSizeCard.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
-        
-        // Font size sample
-        const fontSizeSample = figma.createText();
-        fontSizeSample.characters = "Aa";
-        
-        // Parse font size
-        const fontSizeValue = styleData.fontSizes[i];
-        let fontSize = 16; // Default font size
-        
-        if (fontSizeValue.includes('px')) {
-          const sizeMatch = fontSizeValue.match(/(\d+)px/);
-          if (sizeMatch) {
-            fontSize = parseInt(sizeMatch[1], 10);
-          }
-        } else if (fontSizeValue.includes('pt')) {
-          const sizeMatch = fontSizeValue.match(/(\d+)pt/);
-          if (sizeMatch) {
-            fontSize = parseInt(sizeMatch[1], 10) * 1.33; // Approximate conversion from pt to px
-          }
-        } else if (fontSizeValue.includes('rem')) {
-          const sizeMatch = fontSizeValue.match(/(\d+(\.\d+)?)rem/);
-          if (sizeMatch) {
-            fontSize = parseFloat(sizeMatch[1]) * 16; // Default browser size 16px
-          }
-        } else if (fontSizeValue.includes('em')) {
-          const sizeMatch = fontSizeValue.match(/(\d+(\.\d+)?)em/);
-          if (sizeMatch) {
-            fontSize = parseFloat(sizeMatch[1]) * 16; // Default parent 16px
-          }
-        }
-        
-        fontSizeSample.fontSize = fontSize;
-        fontSizeSample.fontName = { family: "Inter", style: "Regular" };
-        fontSizeSample.x = 10;
-        fontSizeSample.y = 40;
-        fontSizeCard.appendChild(fontSizeSample);
-        
-        // Font size text
-        const fontSizeText = figma.createText();
-        fontSizeText.characters = fontSizeValue;
-        fontSizeText.fontSize = 14;
-        fontSizeText.fontName = { family: "Inter", style: "Regular" };
-        fontSizeText.x = 10;
-        fontSizeText.y = 110;
-        fontSizeText.textAlignHorizontal = "LEFT";
-        fontSizeCard.appendChild(fontSizeText);
-        
-        fontSizesSection.appendChild(fontSizeCard);
-      }
-      
-      // Update Y position
-      currentY += fontSizesSection.height;
     }
 
     // Focus on the created main frame
