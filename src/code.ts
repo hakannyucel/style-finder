@@ -1,34 +1,31 @@
-// Figma API tiplerini kullanmak için gerekli tanımlamalar
-// __html__ değişkeni Figma tarafından otomatik olarak enjekte edilir
-// Bu satırı kaldırıyoruz çünkü zaten tanımlanmış
-// declare const __html__: string;
+// Required definitions to use Figma API types
+// __html__ variable is automatically injected by Figma
+// We're removing this line because it's already defined
 
-// Stil verileri için interface tanımlıyoruz
+// Interface definition for style data
 interface StyleData {
   colors: string[];
   fonts: string[];
   fontSizes: string[];
 }
 
-// Tüm stil bilgilerini depolayacak değişken
+// Variable to store all style information
 let extractedStyles: StyleData | null = null;
 
 figma.showUI(__html__, { width: 400, height: 295 });
 
-// Stil çıkarma metodu
+// Style extraction method
 async function extractStylesFromUrl(url: string): Promise<StyleData> {
   if (!url || url.trim() === '') {
-    throw new Error('URL boş olamaz');
+    throw new Error('URL cannot be empty');
   }
 
-  // URL formatı basit doğrulama
+  // Simple URL format validation
   if (!url.startsWith('http://') && !url.startsWith('https://')) {
     url = 'https://' + url;
   }
 
-  console.log('Fetch işlemi başlatılıyor:', url);
-  
-  // CORS proxy listesi - birisi başarısız olursa diğerini dene
+  // CORS proxy list - try another if one fails
   const corsProxies = [
     (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
     (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
@@ -38,11 +35,10 @@ async function extractStylesFromUrl(url: string): Promise<StyleData> {
   let html = '';
   let lastError: Error | null = null;
   
-  // Her proxy'yi sırayla dene
+  // Try each proxy in sequence
   for (let i = 0; i < corsProxies.length; i++) {
     try {
       const proxyUrl = corsProxies[i](url);
-      console.log(`CORS proxy ${i+1} deneniyor:`, proxyUrl);
       
       const response = await fetch(proxyUrl, {
         method: 'GET',
@@ -56,52 +52,43 @@ async function extractStylesFromUrl(url: string): Promise<StyleData> {
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
       
-      console.log('Fetch başarılı, status:', response.status);
       html = await response.text();
-      console.log('HTML içeriği alındı, uzunluk:', html.length);
       
-      // Başarılı olduysa döngüden çık
       break;
     } catch (error) {
       console.error(`CORS proxy ${i+1} başarısız:`, error);
       lastError = error instanceof Error ? error : new Error(String(error));
       
-      // Son proxy'yi denedik ve başarısız olduysa
       if (i === corsProxies.length - 1) {
         throw new Error(`Tüm CORS proxy'ler başarısız oldu: ${lastError.message}`);
       }
       
-      // Diğer proxy'yi dene
       continue;
     }
   }
   
   if (!html || html.length === 0) {
-    throw new Error('HTML içeriği alınamadı');
+    throw new Error('HTML content could not be retrieved');
   }
 
-  // Sayfa başlığını al
+  // Get page title
   const pageTitle = getPageTitleFromHtml(html);
-  console.log('Sayfa başlığı:', pageTitle);
 
-  // Renk bilgilerini çıkarmak için regex (hex renk kodları)
+  // Regex for extracting color information (hex color codes)
   const colorRegex = /#(?:[0-9a-fA-F]{3}){1,2}\b/g;
   const colors = html.match(colorRegex) || [];
-  console.log('Bulunan hex renk sayısı:', colors.length);
 
-  // RGB ve RGBA renk kodları için ek regex
+  // Additional regex for RGB and RGBA color codes
   const rgbRegex = /rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)/gi;
   const rgbaRegex = /rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*[\d.]+\s*\)/gi;
   
   const rgbColors = html.match(rgbRegex) || [];
   const rgbaColors = html.match(rgbaRegex) || [];
-  console.log('Bulunan RGB renk sayısı:', rgbColors.length);
-  console.log('Bulunan RGBA renk sayısı:', rgbaColors.length);
 
-  // CSS renk isimleri için ek kontroller eklenebilir
-  // (black, white, red vb.)
+  // Additional checks for CSS color names can be added
+  // (black, white, red, etc.)
 
-  // Typography bilgileri için font-family ve font-size araması
+  // Search for font-family and font-size for typography information
   const fontFamilyRegex = /font-family\s*:\s*([^;"}]+)/gi;
   const fontSizeRegex = /font-size\s*:\s*([^;"}]+)/gi;
   const fontWeightRegex = /font-weight\s*:\s*([^;"}]+)/gi;
@@ -129,36 +116,32 @@ async function extractStylesFromUrl(url: string): Promise<StyleData> {
     lineHeights.push(match[1].trim());
   }
 
-  // Tüm renkleri birleştirip tekrarsız hale getiriyoruz
+  // Combine all colors and remove duplicates
   const allColors = [...colors, ...rgbColors, ...rgbaColors];
-  console.log('Toplam tekrarsız renk sayısı:', new Set(allColors).size);
 
-  // Çıkarılan verileri tekrarsız hale getiriyoruz
-  const result = {
-    colors: Array.from(new Set(allColors)),
-    fonts: Array.from(new Set(fonts)),
-    fontSizes: Array.from(new Set(fontSizes))
-  };
-  
-  // Stil verilerinden frame oluştur
-  await createFramesFromStyles(result, url, pageTitle);
-  
-  console.log('Extraction tamamlandı:', result);
-  return result;
+  // Make extracted data unique
+  const uniqueColors = [...new Set(allColors)];
+  const uniqueFonts = [...new Set(fonts)];
+  const uniqueFontSizes = [...new Set(fontSizes)];
+
+  // Create frame from style data
+  await createFramesFromStyles({ colors: uniqueColors, fonts: uniqueFonts, fontSizes: uniqueFontSizes }, url, pageTitle);
+
+  return { colors: uniqueColors, fonts: uniqueFonts, fontSizes: uniqueFontSizes };
 }
 
 /**
- * HTML içeriğinden sayfa başlığını çıkarır
- * @param html HTML içeriği
- * @returns Sayfa başlığı veya boş string
+ * Extracts page title from HTML content
+ * @param html HTML content
+ * @returns Page title or empty string
  */
 function getPageTitleFromHtml(html: string): string {
   try {
-    // Title tag'ini bul
+    // Find title tag
     const titleMatch = html.match(/<title[^>]*>(.*?)<\/title>/i);
     let title = titleMatch ? titleMatch[1] : '';
 
-    // HTML entities'leri decode et
+    // Decode HTML entities
     if (title) {
       title = title.replace(/&amp;/g, '&')
                   .replace(/&lt;/g, '<')
@@ -168,36 +151,36 @@ function getPageTitleFromHtml(html: string): string {
                   .replace(/&nbsp;/g, ' ');
     }
 
-    // H1 tag'ini bul (title bulunamadıysa)
+    // Find H1 tag (if title not found)
     if (!title) {
       const h1Match = html.match(/<h1[^>]*>(.*?)<\/h1>/i);
       title = h1Match ? h1Match[1].replace(/<[^>]+>/g, '') : '';
     }
 
-    // Meta description'ı bul (title ve h1 bulunamadıysa)
+    // Find meta description (if title and h1 not found)
     if (!title) {
       const metaMatch = html.match(/<meta\s+name=["']description["']\s+content=["'](.*?)["']/i);
       title = metaMatch ? metaMatch[1] : '';
     }
 
-    return title || 'Başlık bulunamadı';
+    return title || 'Title not found';
   } catch (error) {
-    console.error('Başlık çıkarma hatası:', error);
-    return 'Başlık bulunamadı';
+    console.error('Title extraction error:', error);
+    return 'Title not found';
   }
 }
 
 /**
- * @param styleData Çıkarılan stil verileri
+ * @param styleData Extracted style data
  */
 async function createFramesFromStyles(styleData: StyleData, url: string, pageTitle: string): Promise<void> {
   try {
-    // Önce kullanılacak tüm fontları yükle
+    // First load all fonts to be used
     await figma.loadFontAsync({ family: "Inter", style: "Regular" });
     await figma.loadFontAsync({ family: "Inter", style: "Medium" });
     await figma.loadFontAsync({ family: "Inter", style: "Bold" });
     
-    // Ana çerçeveyi oluştur
+    // Create main frame
     const mainFrame = figma.createFrame();
     mainFrame.name = "Style Finder";
     mainFrame.resize(1200, 100);
@@ -208,7 +191,7 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
     mainFrame.counterAxisSizingMode = "FIXED";
     mainFrame.itemSpacing = 0;
 
-    // Ana başlık bölümünü oluştur
+    // Create title section
     const titleSection = figma.createFrame();
     titleSection.name = "Title Section";
     titleSection.resize(1200, 208);
@@ -285,10 +268,10 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
 
     titleContainer.appendChild(titleContainer2);
     
-    // Y pozisyonunu takip etmek için bir değişken oluştur
+    // Create a variable to track Y position
     let currentY = titleSection.height;
     
-    // Renk kartları için bölüm oluştur
+    // Create section for color cards
     if (styleData.colors.length > 0) {
       const colorsSection = figma.createFrame();
       colorsSection.name = "Colors Section";
@@ -301,10 +284,10 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
       colorsSection.paddingBottom = 40;
       colorsSection.itemSpacing = 20;
       colorsSection.x = 0;
-      colorsSection.y = currentY; // Önceki bölümün altına yerleştir
+      colorsSection.y = currentY; // Position below the previous section
       colorsSection.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
 
-      // Heading adında yeni frame ekle w: 1072 h: 56 vertical gap: 24 x: 64 y: 64 olsun
+      // Add a new frame named Heading with w: 1072 h: 56 vertical gap: 24 x: 64 y: 64
       const heading = figma.createFrame();
       heading.name = "Heading";
       heading.resize(1072, 56);
@@ -313,7 +296,7 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
       heading.y = 64;
       colorsSection.appendChild(heading);
 
-      // Heading içerisine 2 tane text ekle
+      // Add two text elements inside the Heading
       const headingText = figma.createText();
       headingText.characters = "Color Palette";
       headingText.fontSize = 20;
@@ -356,7 +339,7 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
       colorCardsSection.resize(1072, colorCardsSection.height);
       colorsSection.appendChild(colorCardsSection);
 
-      // Her renk için kart oluştur - En fazla 5 renk gösterelim, daha fazlası varsa kaydırmalı görünüm gerekebilir
+      // Create a card for each color - Show maximum 5 colors, may need scrollable view for more
       for (let i = 0; i < styleData.colors.length; i++) {
         const colorCard = figma.createFrame();
         colorCard.name = `Color Card ${i + 1}`;
@@ -381,7 +364,7 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
 
         colorCard.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
         
-        // Renk örneği ekle
+        // Add color sample
         const colorSample = figma.createFrame();
         colorSample.name = `Color Sample ${i + 1}`;
         colorSample.resize(192, 98);
@@ -390,11 +373,11 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
         colorSample.cornerRadius = 12;
         colorSample.verticalPadding = 8;
         
-        // Renk değerini parse et ve uygula
+        // Parse and apply color value
         const colorValue = styleData.colors[i];
-        let colorFill: RGB = { r: 0.95, g: 0.98, b: 0.99 }; // Varsayılan renk
+        let colorFill: RGB = { r: 0.95, g: 0.98, b: 0.99 }; // Default color
         
-        // HEX renk kodu ise
+        // If it's a HEX color code
         if (colorValue.startsWith('#')) {
           const hex = colorValue.replace('#', '');
           if (hex.length === 3) {
@@ -409,7 +392,7 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
             colorFill = { r, g, b };
           }
         }
-        // RGB renk kodu ise
+        // If it's an RGB color code
         else if (colorValue.startsWith('rgb')) {
           const rgbMatch = colorValue.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/i);
           if (rgbMatch) {
@@ -423,7 +406,7 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
         colorSample.fills = [{ type: 'SOLID', color: colorFill }];
         colorCard.appendChild(colorSample);
         
-        // Renk değerini gösteren yazı ekle
+        // Add text showing the color value
         const colorText = figma.createText();
         colorText.characters = colorValue;
         colorText.fontSize = 14;
@@ -441,11 +424,11 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
       colorsSection.resize(1200, colorsSection.height);
       mainFrame.appendChild(colorsSection);
       
-      // Y pozisyonunu güncelle
+      // Update Y position
       currentY += colorsSection.height;
     }
 
-    // Font kartları için bölüm oluştur
+    // Create section for font cards
     if (styleData.fonts.length > 0) {
       const fontsSection = figma.createFrame();
       fontsSection.name = "Fonts Section";
@@ -458,11 +441,11 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
       fontsSection.paddingBottom = 40;
       fontsSection.itemSpacing = 20;
       fontsSection.x = 0;
-      fontsSection.y = currentY; // Önceki bölümün altına yerleştir
+      fontsSection.y = currentY; // Position below the previous section
       fontsSection.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
       mainFrame.appendChild(fontsSection);
 
-      // Font başlığını ekle
+      // Add font title
       const fontTitle = figma.createText();
       fontTitle.characters = "FONTS";
       fontTitle.fontSize = 18;
@@ -471,7 +454,7 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
       fontTitle.y = 20;
       fontsSection.appendChild(fontTitle);
 
-      // Her font için kart oluştur
+      // Create a card for each font
       const displayFontCount = Math.min(styleData.fonts.length, 5);
       for (let i = 0; i < displayFontCount; i++) {
         const fontCard = figma.createFrame();
@@ -480,12 +463,12 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
         fontCard.cornerRadius = 16;
         fontCard.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
         
-        // Font örneğini ekle
+        // Add font sample
         const fontSample = figma.createText();
         fontSample.characters = "Aa Bb Cc";
         fontSample.fontSize = 24;
         
-        // Font ismini parse et
+        // Parse font name
         const fontValue = styleData.fonts[i];
         const fontName = fontValue.split(',')[0].trim().replace(/['\"]/g, '');
         
@@ -499,7 +482,7 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
         fontSample.y = 40;
         fontCard.appendChild(fontSample);
         
-        // Font ismini gösteren yazı ekle
+        // Add text showing the font name
         const fontText = figma.createText();
         fontText.characters = fontName;
         fontText.fontSize = 14;
@@ -512,11 +495,11 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
         fontsSection.appendChild(fontCard);
       }
       
-      // Y pozisyonunu güncelle
+      // Update Y position
       currentY += fontsSection.height;
     }
 
-    // Font boyutları için bölüm oluştur
+    // Create section for font sizes
     if (styleData.fontSizes.length > 0) {
       const fontSizesSection = figma.createFrame();
       fontSizesSection.name = "Font Sizes Section";
@@ -529,11 +512,11 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
       fontSizesSection.paddingBottom = 40;
       fontSizesSection.itemSpacing = 20;
       fontSizesSection.x = 0;
-      fontSizesSection.y = currentY; // Önceki bölümün altına yerleştir
+      fontSizesSection.y = currentY; // Position below the previous section
       fontSizesSection.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
       mainFrame.appendChild(fontSizesSection);
 
-      // Font boyutu başlığını ekle
+      // Add font size title
       const fontSizeTitle = figma.createText();
       fontSizeTitle.characters = "FONT SIZES";
       fontSizeTitle.fontSize = 18;
@@ -542,7 +525,7 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
       fontSizeTitle.y = 20;
       fontSizesSection.appendChild(fontSizeTitle);
 
-      // Her font boyutu için kart oluştur
+      // Create a card for each font size
       const displayFontSizeCount = Math.min(styleData.fontSizes.length, 5);
       for (let i = 0; i < displayFontSizeCount; i++) {
         const fontSizeCard = figma.createFrame();
@@ -551,13 +534,13 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
         fontSizeCard.cornerRadius = 16;
         fontSizeCard.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
         
-        // Font boyutu örneğini ekle
+        // Font size sample
         const fontSizeSample = figma.createText();
         fontSizeSample.characters = "Aa";
         
-        // Font boyutunu parse et
+        // Parse font size
         const fontSizeValue = styleData.fontSizes[i];
-        let fontSize = 16; // Varsayılan font boyutu
+        let fontSize = 16; // Default font size
         
         if (fontSizeValue.includes('px')) {
           const sizeMatch = fontSizeValue.match(/(\d+)px/);
@@ -567,17 +550,17 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
         } else if (fontSizeValue.includes('pt')) {
           const sizeMatch = fontSizeValue.match(/(\d+)pt/);
           if (sizeMatch) {
-            fontSize = parseInt(sizeMatch[1], 10) * 1.33; // pt'dan px'e yaklaşık dönüşüm
+            fontSize = parseInt(sizeMatch[1], 10) * 1.33; // Approximate conversion from pt to px
           }
         } else if (fontSizeValue.includes('rem')) {
           const sizeMatch = fontSizeValue.match(/(\d+(\.\d+)?)rem/);
           if (sizeMatch) {
-            fontSize = parseFloat(sizeMatch[1]) * 16; // varsayılan tarayıcı boyutu 16px
+            fontSize = parseFloat(sizeMatch[1]) * 16; // Default browser size 16px
           }
         } else if (fontSizeValue.includes('em')) {
           const sizeMatch = fontSizeValue.match(/(\d+(\.\d+)?)em/);
           if (sizeMatch) {
-            fontSize = parseFloat(sizeMatch[1]) * 16; // varsayılan olarak parent 16px
+            fontSize = parseFloat(sizeMatch[1]) * 16; // Default parent 16px
           }
         }
         
@@ -587,7 +570,7 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
         fontSizeSample.y = 40;
         fontSizeCard.appendChild(fontSizeSample);
         
-        // Font boyutunu gösteren yazı ekle
+        // Font size text
         const fontSizeText = figma.createText();
         fontSizeText.characters = fontSizeValue;
         fontSizeText.fontSize = 14;
@@ -600,65 +583,65 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
         fontSizesSection.appendChild(fontSizeCard);
       }
       
-      // Y pozisyonunu güncelle (ihtiyaç olursa)
+      // Update Y position
       currentY += fontSizesSection.height;
     }
 
-    // Oluşturulan ana frame'e odaklan
+    // Focus on the created main frame
     figma.currentPage.appendChild(mainFrame);
     figma.viewport.scrollAndZoomIntoView([mainFrame]);
     
-    // İşlem tamamlandı bildirimi
-    figma.notify('Style Guide oluşturuldu!', { timeout: 3000 });
+    // Completion notification
+    figma.notify('Style Guide created!', { timeout: 3000 });
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.log('Hata oluştu:', errorMessage);
+    console.log('Error occurred:', errorMessage);
     
-    // Hata detaylarını UI'ye gönder
+    // Send error details to UI
     figma.ui.postMessage({ 
       type: 'error', 
       message: errorMessage,
-      details: error instanceof Error ? error.stack : 'Detay yok'
+      details: error instanceof Error ? error.stack : 'No details'
     });
     
-    // Hata bildirimi göster
-    figma.notify("Hata: " + errorMessage, { error: true });
+    // Show error notification
+    figma.notify("Error: " + errorMessage, { error: true });
   }
 }
 
 figma.ui.onmessage = async (msg) => {
   if (msg.type === 'log') {
-    console.log(msg.text); // UI'dan gelen mesajı konsola yazdırma
+    console.log(msg.text); // Log message from UI to console
   }
   else if (msg.type === 'extract') {
     figma.notify("Getting styles from website...", { timeout: 1000 });
     
     const url = msg.url;
     
-    // URL boş ise hata mesajı gönder
+    // Send error message if URL is empty
     if (!url) {
       figma.ui.postMessage({ type: 'validation-error', message: 'URL cannot be empty' });
       return;
     }
 
     try {
-      // URL'den stilleri çıkar
+      // Extract styles from URL
       extractedStyles = await extractStylesFromUrl(url);
       
-      // UI'ya sonuçları gönder
+      // Send results to UI
       figma.ui.postMessage({ type: 'result', data: extractedStyles });
       figma.notify("Styles extracted successfully!", { timeout: 2000 });
     } catch (error: unknown) {
       console.error('Error extracting styles:', error);
       
-      // Hata mesajını UI'ya gönder
+      // Send error message to UI
       figma.ui.postMessage({ 
         type: 'error', 
         message: error instanceof Error ? error.message : String(error),
         details: error instanceof Error ? error.stack : 'No details available'
       });
       
-      // Hata bildirimi göster
+      // Show error notification
       figma.notify("Error extracting styles: " + (error instanceof Error ? error.message : String(error)), { error: true });
     }
   }
