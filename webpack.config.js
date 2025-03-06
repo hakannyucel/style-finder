@@ -29,7 +29,11 @@ module.exports = {
         generator: {
           filename: 'images/[name][ext]'
         }
-      }
+      },
+      {
+        test: /\.svg$/,
+        type: 'asset/source'
+      },
     ]
   },
   resolve: {
@@ -38,7 +42,8 @@ module.exports = {
   output: {
     filename: '[name].js',
     path: path.resolve(__dirname, 'dist'),
-    clean: true
+    clean: true,
+    publicPath: ''
   },
   plugins: [
     new HtmlWebpackPlugin({
@@ -57,7 +62,7 @@ module.exports = {
     new CopyWebpackPlugin({
       patterns: [
         { 
-          from: 'assets', 
+          from: 'src/assets', 
           to: 'assets' 
         }
       ]
