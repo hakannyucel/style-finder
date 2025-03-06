@@ -59,8 +59,6 @@ export function getColorName(hexCode: string): string {
     color.hex.toUpperCase() === formattedHex.toUpperCase()
   );
 
-  console.log(exactMatch);
-  
   if (exactMatch) {
     return exactMatch.name;
   }
@@ -88,6 +86,5 @@ export function getColorName(hexCode: string): string {
     }
   }
   
-  console.log(closestColorName);
   return closestColorName;
 } 
