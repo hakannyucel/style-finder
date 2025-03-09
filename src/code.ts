@@ -12,6 +12,7 @@ interface StyleData {
   colors: string[];
   fonts: string[];
   fontSizes: string[];
+  gradients: string[];
 }
 
 // Variable to store all style information
@@ -91,8 +92,24 @@ async function extractStylesFromUrl(url: string): Promise<StyleData> {
   const rgbRegex = /rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)/gi;
   const rgbaRegex = /rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*[\d.]+\s*\)/gi;
   
+  // Regex for extracting gradient information
+  const linearGradientRegex = /linear-gradient\([^)]+\)/gi;
+  const radialGradientRegex = /radial-gradient\([^)]+\)/gi;
+  
   const rgbColors = html.match(rgbRegex) || [];
   const rgbaColors = html.match(rgbaRegex) || [];
+  const linearGradients = html.match(linearGradientRegex) || [];
+  const radialGradients = html.match(radialGradientRegex) || [];
+  
+  // Combine all gradients and remove duplicates
+  const allGradients = [...linearGradients, ...radialGradients];
+  const uniqueGradients = [...new Set(allGradients)];
+
+  // Filter gradients to only include those with at least 2 color stops
+  const filteredGradients = uniqueGradients.filter(gradient => {
+    const colorStops = extractGradientColors(gradient);
+    return colorStops.length >= 2; // Only keep gradients with at least 2 color stops
+  });
 
   // Convert RGB colors to HEX format
   const convertedRgbColors = rgbColors.map(color => {
@@ -152,9 +169,9 @@ async function extractStylesFromUrl(url: string): Promise<StyleData> {
   const uniqueFontSizes = [...new Set(fontSizes)];
 
   // Create frame from style data
-  await createFramesFromStyles({ colors: uniqueColors, fonts: uniqueFonts, fontSizes: uniqueFontSizes }, url, pageTitle);
+  await createFramesFromStyles({ colors: uniqueColors, fonts: uniqueFonts, fontSizes: uniqueFontSizes, gradients: filteredGradients }, url, pageTitle);
 
-  return { colors: uniqueColors, fonts: uniqueFonts, fontSizes: uniqueFontSizes };
+  return { colors: uniqueColors, fonts: uniqueFonts, fontSizes: uniqueFontSizes, gradients: filteredGradients };
 }
 
 /**
@@ -211,6 +228,34 @@ function rgbToHex(r: number, g: number, b: number): string {
   
   // Return uppercase hex code
   return `#${rHex}${gHex}${bHex}`.toUpperCase();
+}
+
+// Function to convert rgba/rgb string to hex
+function rgbaToHex(rgbaStr: string): string {
+  // Extract the RGB values from the rgba/rgb string
+  // Handle both comma and space separated values, and optional spaces
+  // Also handle decimal points in alpha values (like .9 instead of 0.9)
+  const rgbMatch = rgbaStr.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*(?:[\d]*\.[\d]+|[\d]+))?\s*\)/i);
+  if (rgbMatch) {
+    const r = parseInt(rgbMatch[1], 10);
+    const g = parseInt(rgbMatch[2], 10);
+    const b = parseInt(rgbMatch[3], 10);
+    return rgbToHex(r, g, b);
+  }
+  
+  // If the string doesn't match the pattern but still contains 'rgb', 
+  // try to extract just the numbers
+  if (rgbaStr.includes('rgb')) {
+    const numbers = rgbaStr.match(/\d+/g);
+    if (numbers && numbers.length >= 3) {
+      const r = parseInt(numbers[0], 10);
+      const g = parseInt(numbers[1], 10);
+      const b = parseInt(numbers[2], 10);
+      return rgbToHex(r, g, b);
+    }
+  }
+  
+  return rgbaStr; // Return original if not a valid rgba/rgb string
 }
 
 // Function to ensure hex codes are uppercase and in 6-digit format
@@ -804,6 +849,326 @@ async function createFramesFromStyles(styleData: StyleData, url: string, pageTit
       currentY += colorsSection.height;
     }
 
+    // Create section for gradient cards
+    if (styleData.gradients.length > 0) {
+      // Group gradients by type (linear, radial)
+      const gradientGroups: { [key: string]: string[] } = {
+        linear: [],
+        radial: []
+      };
+      
+      // Group gradients by type
+      styleData.gradients.forEach(gradient => {
+        if (gradient.includes('linear-gradient')) {
+          gradientGroups.linear.push(gradient);
+        } else if (gradient.includes('radial-gradient')) {
+          gradientGroups.radial.push(gradient);
+        }
+      });
+      
+      const gradientsSection = figma.createFrame();
+
+      gradientsSection.name = "Gradients Section";
+      gradientsSection.layoutMode = "VERTICAL";
+      gradientsSection.primaryAxisSizingMode = "AUTO";
+      gradientsSection.counterAxisSizingMode = "AUTO";
+      gradientsSection.verticalPadding = 64;
+      gradientsSection.horizontalPadding = 64;
+      gradientsSection.itemSpacing = 24;
+      gradientsSection.x = 0;
+      gradientsSection.y = currentY; // Position below the previous section
+      gradientsSection.fills = [];
+      gradientsSection.strokes = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 }, opacity: 0.12 }];
+      gradientsSection.strokeWeight = 1;
+      gradientsSection.strokeAlign = "INSIDE";
+
+      mainFrame.appendChild(gradientsSection);
+
+      // Add a new frame named Heading with w: 1072 h: 56 vertical gap: 24 x: 64 y: 64
+      const heading = figma.createFrame();
+      heading.name = "Heading";
+      heading.resize(1072, 56);
+      heading.x = 64;
+      heading.y = 64;
+      heading.itemSpacing = 4;
+      heading.fills = [];
+      gradientsSection.appendChild(heading);
+
+      // Add two text elements inside the Heading
+      const headingText = figma.createText();
+      headingText.characters = "Gradient Palette";
+      headingText.fontSize = 20;
+      headingText.fontName = { family: "Inter", style: "Medium" };
+      headingText.x = 0;
+      headingText.y = 0;
+      headingText.resize(1072, 28)
+      headingText.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
+      headingText.lineHeight = { value: 28, unit: "PIXELS" };
+      headingText.textAlignVertical = "CENTER";
+      headingText.textAlignHorizontal = "LEFT";
+
+      heading.appendChild(headingText);
+
+      const headingText2 = figma.createText();
+      headingText2.characters = `${styleData.gradients.length} found gradients`;
+      headingText2.fontSize = 16;
+      headingText2.fontName = { family: "Inter", style: "Regular" };
+      headingText2.lineHeight = { value: 24, unit: "PIXELS" };
+      headingText2.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 }, opacity: 0.56 }];
+      headingText2.resize(1072, 24)
+      headingText2.x = 0;
+      headingText2.y = 32;
+      headingText.textAlignVertical = "CENTER";
+      headingText.textAlignHorizontal = "LEFT";
+      
+      heading.appendChild(headingText2);
+
+      const gradientCardsSection = figma.createFrame();
+      gradientCardsSection.name = "Gradient Cards Section";
+      gradientCardsSection.x = 64;
+      gradientCardsSection.y = 144;
+      gradientCardsSection.layoutAlign = "STRETCH";
+      gradientCardsSection.primaryAxisAlignItems = "MIN";
+      gradientCardsSection.layoutMode = "HORIZONTAL";
+      gradientCardsSection.itemSpacing = 18;
+      gradientCardsSection.counterAxisSpacing = 18;
+      gradientCardsSection.layoutWrap = "WRAP";
+      gradientCardsSection.fills = [];
+      gradientCardsSection.clipsContent = false;
+      gradientCardsSection.resize(1072, gradientCardsSection.height);
+      gradientsSection.appendChild(gradientCardsSection);
+
+      // Create a card for each gradient
+      for (let i = 0; i < styleData.gradients.length; i++) {
+        const gradientCard = figma.createFrame();
+        gradientCard.name = `Gradient Card ${i + 1}`;
+        gradientCard.resize(200, 200);
+        gradientCard.cornerRadius = 16;
+        gradientCard.strokes = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 }, opacity: 0.08 }];
+        gradientCard.strokeWeight = 1;
+        gradientCard.strokeAlign = "OUTSIDE";
+        gradientCard.fills = [];
+        gradientCardsSection.appendChild(gradientCard);
+        // Add gradient sample
+        const gradientSample = figma.createFrame();
+        gradientSample.name = `Gradient Sample ${i + 1}`;
+        gradientSample.resize(200, 136);
+        gradientSample.x = 0;
+        gradientSample.y = 0;
+        gradientSample.itemSpacing = 8;
+        gradientSample.cornerRadius = 12;
+        gradientSample.strokes = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 }, opacity: 0.12 }];
+        gradientSample.strokeWeight = 1;
+        gradientSample.strokeAlign = "OUTSIDE";
+        gradientSample.layoutAlign = "STRETCH";
+        gradientSample.primaryAxisAlignItems = "CENTER";
+        gradientSample.counterAxisAlignItems = "CENTER";
+
+        gradientCard.appendChild(gradientSample);
+        
+        // Get the gradient value
+        const gradientValue = styleData.gradients[i];
+        
+        // Process the gradient string to get properly formatted hex colors
+        const { firstColor: firstColorHex, secondColor: secondColorHex } = processGradientString(gradientValue);
+        
+        // Extract colors from the gradient (for the gradient fill)
+        const extractedGradientColors = extractGradientColors(gradientValue);
+        
+        // If we have at least 2 gradient colors, create a visual representation
+        if (extractedGradientColors.length >= 2) {
+          // Parse colors for gradient representation
+          const colorStops: ColorStop[] = [];
+          
+          // Process up to 5 colors for the gradient
+          const maxColors = Math.min(extractedGradientColors.length, 5);
+          for (let j = 0; j < maxColors; j++) {
+            const colorValue = extractedGradientColors[j];
+            let colorFill: RGB = { r: 0.95, g: 0.98, b: 0.99 }; // Default color
+            
+            // If it's a HEX color code
+            if (colorValue.startsWith('#')) {
+              const hex = colorValue.replace('#', '');
+              if (hex.length === 3) {
+                const r = parseInt(hex[0] + hex[0], 16) / 255;
+                const g = parseInt(hex[1] + hex[1], 16) / 255;
+                const b = parseInt(hex[2] + hex[2], 16) / 255;
+                colorFill = { r, g, b };
+              } else if (hex.length === 6) {
+                const r = parseInt(hex.slice(0, 2), 16) / 255;
+                const g = parseInt(hex.slice(2, 4), 16) / 255;
+                const b = parseInt(hex.slice(4, 6), 16) / 255;
+                colorFill = { r, g, b };
+              }
+            }
+            // If it's an RGB color code
+            else if (colorValue.startsWith('rgb')) {
+              const rgbMatch = colorValue.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/i);
+              if (rgbMatch) {
+                const r = parseInt(rgbMatch[1], 10) / 255;
+                const g = parseInt(rgbMatch[2], 10) / 255;
+                const b = parseInt(rgbMatch[3], 10) / 255;
+                colorFill = { r, g, b };
+              }
+            }
+            
+            // Calculate position based on index
+            const position = j / (maxColors - 1);
+            // For gradient stops, we need to add the alpha channel
+            colorStops.push({ color: { ...colorFill, a: 1 }, position });
+          }
+          
+          // Create a gradient fill
+          if (colorStops.length >= 2) {
+            const isLinear = gradientValue.includes('linear-gradient');
+            
+            if (isLinear) {
+              // Apply linear gradient directly to gradientSample
+              gradientSample.fills = [{
+                type: 'GRADIENT_LINEAR',
+                gradientTransform: [
+                  [1, 0, 0],
+                  [0, 0, 1]
+                ],
+                gradientStops: colorStops
+              }];
+            } else {
+              // Apply radial gradient directly to gradientSample
+              gradientSample.fills = [{
+                type: 'GRADIENT_RADIAL',
+                gradientTransform: [
+                  [0.5, 0, 0.5],
+                  [0, 0.5, 0.5]
+                ],
+                gradientStops: colorStops
+              }];
+            }
+          } else {
+            // If we don't have enough colors for a gradient, use a default fill
+            gradientSample.fills = [{ type: 'SOLID', color: { r: 0.95, g: 0.98, b: 0.99 } }];
+          }
+
+          // Determine gradient type and color information
+          const isLinear = gradientValue.includes('linear-gradient');
+          
+          // Get the color name from the first gradient color
+          const firstGradientColor = extractedGradientColors.length > 0 ? extractedGradientColors[0] : '#FFFFFF';
+          // Convert to hex if it's in rgba format
+          const firstGradientColorHex = firstGradientColor.startsWith('rgb') ? rgbaToHex(firstGradientColor) : firstGradientColor;
+          const gradientColorName = getColorName(firstGradientColorHex);
+          
+          const gradientNameFrame = figma.createFrame();
+          gradientNameFrame.name = "Gradient Name Frame";
+          gradientNameFrame.resize(200, 64);
+          gradientNameFrame.y = 136;
+          gradientNameFrame.fills = [];
+          gradientNameFrame.itemSpacing = 2;
+          gradientNameFrame.horizontalPadding = 16;
+          gradientNameFrame.verticalPadding = 12;
+          gradientNameFrame.clipsContent = false;
+          gradientNameFrame.layoutMode = "HORIZONTAL";
+          gradientCard.appendChild(gradientNameFrame);
+
+          // create a frame for the color name
+          const gradientTypeFrame = figma.createFrame();
+          gradientTypeFrame.name = "Gradient Type Frame";
+          gradientTypeFrame.x = 16;
+          gradientTypeFrame.y = 12;
+          gradientTypeFrame.resize(168, 40);
+          gradientTypeFrame.itemSpacing = 8;
+          gradientTypeFrame.clipsContent = false;
+          gradientTypeFrame.fills = [];
+          gradientNameFrame.appendChild(gradientTypeFrame);
+
+          // create a frame for the color value
+          const gradientInfoFrame = figma.createFrame();
+          gradientInfoFrame.name = "Gradient Info Frame";
+          gradientInfoFrame.x = 0;
+          gradientInfoFrame.y = 0;
+          gradientInfoFrame.resize(168, 40);
+          gradientInfoFrame.itemSpacing = 2;
+          gradientInfoFrame.clipsContent = false;
+          gradientInfoFrame.layoutMode = "VERTICAL";
+          gradientInfoFrame.fills = [];
+
+          gradientTypeFrame.appendChild(gradientInfoFrame);
+          
+          // Add text showing the color name
+          const gradientTypeText = figma.createText();
+          gradientTypeText.characters = gradientColorName;
+          gradientTypeText.fontSize = 14;
+          gradientTypeText.fontName = { family: "Inter", style: "Medium" };
+          gradientTypeText.x = 0;
+          gradientTypeText.y = 0;
+          gradientTypeText.textAlignHorizontal = "LEFT";
+          gradientTypeText.lineHeight = { value: 22, unit: "PIXELS" };
+          gradientTypeText.letterSpacing = { value: -0.6, unit: "PERCENT" };
+          gradientTypeText.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
+          gradientInfoFrame.appendChild(gradientTypeText);
+          
+          // Create a frame for the hex codes
+          const hexCodesFrame = figma.createFrame();
+          hexCodesFrame.name = "Hex Codes Frame";
+          hexCodesFrame.x = 16;
+          hexCodesFrame.y = 36;
+          hexCodesFrame.resize(168, 16);
+          hexCodesFrame.itemSpacing = 8;
+          hexCodesFrame.layoutMode = "HORIZONTAL";
+          hexCodesFrame.fills = [];
+          
+          // Get hex codes from colorStops if available, otherwise use the processed gradient string
+          let startHexColor = firstColorHex;
+          let endHexColor = secondColorHex;
+          
+          // If we have colorStops, use them for more accurate hex values
+          if (extractedGradientColors.length >= 2 && colorStops && colorStops.length >= 2) {
+            // Convert the first colorStop to hex
+            startHexColor = rgbToHex(
+              Math.round(colorStops[0].color.r * 255),
+              Math.round(colorStops[0].color.g * 255),
+              Math.round(colorStops[0].color.b * 255)
+            );
+            
+            // Convert the last colorStop to hex
+            endHexColor = rgbToHex(
+              Math.round(colorStops[colorStops.length - 1].color.r * 255),
+              Math.round(colorStops[colorStops.length - 1].color.g * 255),
+              Math.round(colorStops[colorStops.length - 1].color.b * 255)
+            );
+          }
+          
+          // First color hex text
+          const firstColorText = figma.createText();
+          firstColorText.characters = startHexColor;
+          firstColorText.fontSize = 12;
+          firstColorText.fontName = { family: "Inter", style: "Regular" };
+          firstColorText.lineHeight = { value: 16, unit: "PIXELS" };
+          firstColorText.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 }, opacity: 0.56 }];
+          hexCodesFrame.appendChild(firstColorText);
+          
+          // Second color hex text
+          const secondColorText = figma.createText();
+          secondColorText.characters = endHexColor;
+          secondColorText.fontSize = 12;
+          secondColorText.fontName = { family: "Inter", style: "Regular" };
+          secondColorText.lineHeight = { value: 16, unit: "PIXELS" };
+          secondColorText.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 }, opacity: 0.56 }];
+          hexCodesFrame.appendChild(secondColorText);
+          
+          gradientInfoFrame.appendChild(hexCodesFrame);
+          gradientCardsSection.appendChild(gradientCard);
+        }
+      }
+      
+      gradientCardsSection.resize(1072, gradientCardsSection.height);
+      gradientCardsSection.counterAxisSizingMode = "AUTO";
+      gradientsSection.resize(1200, gradientsSection.height);
+      mainFrame.appendChild(gradientsSection);
+      
+      // Update Y position
+      currentY += gradientsSection.height;
+    }
+
     // Focus on the created main frame
     figma.currentPage.appendChild(mainFrame);
     figma.viewport.scrollAndZoomIntoView([mainFrame]);
@@ -913,4 +1278,154 @@ function isGrayscaleColor(hexColor: string): boolean {
   
   // If saturation is very low, consider it grayscale
   return s < 0.1;
+}
+
+/**
+ * Extracts color stops from a gradient string
+ * @param gradientStr The gradient string (linear-gradient or radial-gradient)
+ * @returns Array of color stops
+ */
+function extractGradientColors(gradientStr: string): string[] {
+  // Extract the content inside the parentheses
+  const match = gradientStr.match(/gradient\((.*)\)/i);
+  if (!match || !match[1]) return [];
+  
+  const content = match[1];
+  
+  // Split by commas, but not those inside color functions like rgb(), rgba(), etc.
+  const parts: string[] = [];
+  let currentPart = '';
+  let parenCount = 0;
+  
+  for (let i = 0; i < content.length; i++) {
+    const char = content[i];
+    if (char === '(') parenCount++;
+    if (char === ')') parenCount--;
+    
+    if (char === ',' && parenCount === 0) {
+      parts.push(currentPart.trim());
+      currentPart = '';
+    } else {
+      currentPart += char;
+    }
+  }
+  
+  if (currentPart.trim()) {
+    parts.push(currentPart.trim());
+  }
+  
+  // Filter out angle/position parameters and keep only color stops
+  const colorStops = parts.filter(part => {
+    // Skip parts that are likely to be directions or positions
+    const isDirection = /^to\s+(top|bottom|left|right)|^\d+deg|^\d+rad|^\d+turn|^ellipse|^circle|^closest-side|^closest-corner|^farthest-side|^farthest-corner/.test(part);
+    
+    // Check if the part contains a color
+    const hasColor = /(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|[a-zA-Z]+\s+\d+%|[a-zA-Z]+)/.test(part);
+    
+    return !isDirection && hasColor;
+  });
+
+  console.log(colorStops);
+  
+  // Extract just the color part from each stop
+  return colorStops.map(stop => {
+    // Extract color from "color position" format (e.g., "red 10%")
+    const colorMatch = stop.match(/(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|[a-zA-Z]+)(?:\s+\d+%)?/);
+    const colorValue = colorMatch ? colorMatch[1] : stop;
+    
+    // Convert to hex if it's in rgba format
+    if (colorValue.toLowerCase().startsWith('rgb')) {
+      try {
+      console.log(colorValue);
+        return rgbaToHex(colorValue);
+      } catch (e) {
+        console.log('Error converting RGB to hex:', colorValue);
+        return '#FFFFFF'; // Default to white if conversion fails
+      }
+    }
+    return colorValue;
+  });
+}
+
+// Helper function to process gradient strings and ensure proper hex conversion
+function processGradientString(gradientStr: string): { firstColor: string, secondColor: string } {
+  // Extract the content inside the parentheses
+  const match = gradientStr.match(/gradient\((.*)\)/i);
+  if (!match || !match[1]) return { firstColor: '#FFFFFF', secondColor: '#FFFFFF' };
+  
+  const content = match[1];
+  
+  // Split by commas, but not those inside color functions like rgb(), rgba(), etc.
+  const parts: string[] = [];
+  let currentPart = '';
+  let parenCount = 0;
+  
+  for (let i = 0; i < content.length; i++) {
+    const char = content[i];
+    if (char === '(') parenCount++;
+    if (char === ')') parenCount--;
+    
+    if (char === ',' && parenCount === 0) {
+      parts.push(currentPart.trim());
+      currentPart = '';
+    } else {
+      currentPart += char;
+    }
+  }
+  
+  if (currentPart.trim()) {
+    parts.push(currentPart.trim());
+  }
+  
+  // Filter out direction/position parameters
+  const colorParts = parts.filter(part => {
+    // Skip parts that are likely to be directions or positions
+    const isDirection = /^to\s+(top|bottom|left|right)|^\d+deg|^\d+rad|^\d+turn|^ellipse|^circle|^closest-side|^closest-corner|^farthest-side|^farthest-corner/.test(part);
+    
+    // Check if the part contains a color
+    const hasColor = /(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|[a-zA-Z]+\s+\d+%|[a-zA-Z]+)/.test(part);
+    
+    return !isDirection && hasColor;
+  });
+  
+  // Extract color values
+  let firstColor = '#FFFFFF';
+  let secondColor = '#FFFFFF';
+  
+  if (colorParts.length >= 1) {
+    // Process first color
+    const firstColorMatch = colorParts[0].match(/(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|[a-zA-Z]+)(?:\s+\d+%)?/);
+    const firstColorValue = firstColorMatch ? firstColorMatch[1] : colorParts[0];
+    
+    // Convert to hex if needed
+    if (firstColorValue.toLowerCase().startsWith('rgb')) {
+      firstColor = rgbaToHex(firstColorValue);
+    } else {
+      firstColor = firstColorValue;
+    }
+  }
+  
+  if (colorParts.length >= 2) {
+    // Process second color
+    const secondColorMatch = colorParts[1].match(/(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|[a-zA-Z]+)(?:\s+\d+%)?/);
+    const secondColorValue = secondColorMatch ? secondColorMatch[1] : colorParts[1];
+    
+    // Convert to hex if needed
+    if (secondColorValue.toLowerCase().startsWith('rgb')) {
+      secondColor = rgbaToHex(secondColorValue);
+    } else {
+      secondColor = secondColorValue;
+    }
+  }
+  
+  // Ensure both colors are in proper hex format
+  if (firstColor.startsWith('#')) {
+    firstColor = ensureHexUppercase(firstColor);
+  }
+  
+  if (secondColor.startsWith('#')) {
+    secondColor = ensureHexUppercase(secondColor);
+  }
+  
+  return { firstColor, secondColor };
 }
