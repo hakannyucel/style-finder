@@ -750,27 +750,16 @@
     </div>
 
     <script>
-      document.getElementById('extractBtn').onclick = () => {
-        const url = document.getElementById('websiteUrl').value;
-        parent.postMessage({ pluginMessage: { type: 'extract', url } }, '*');
-      };
-
-      document.getElementById('createFramesBtn').onclick = () => {
-        parent.postMessage({ pluginMessage: { type: 'create-frames' } }, '*');
-      };
-
       const svgUrl = './assets/header-logo.svg';
       fetch(svgUrl)
         .then(response => {
-          console.log(response);
           return response.text()
         })
         .then(svgContent => {
-          console.log(svgContent);
           figma.clientStorage.setAsync('headerLogoSvg', svgContent);
         })
         .catch(error => {
-          console.error('SVG dosyası okunurken hata oluştu:', error);
+          console.error('Error occurred while reading SVG file:', error);
         });
 
       window.onmessage = (event) => {
@@ -784,14 +773,6 @@
           setTimeout(() => {
             inputElement.style.border = '1px solid #363636';
           }, 2000);
-        }
-        else if (message.type === 'result') {
-          // Show create frames button when results are available
-          document.getElementById('createFramesBtn').style.display = 'flex';
-        }
-        else if (message.type === 'error') {
-          console.error('Error from plugin:', message.message);
-          document.getElementById('createFramesBtn').style.display = 'none';
         }
       };
     </script>

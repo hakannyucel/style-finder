@@ -51,8 +51,7 @@ async function extractStylesFromUrl(url: string): Promise<StyleData> {
         method: 'GET',
         headers: {
           'Accept': 'text/html,application/xhtml+xml,application/xml',
-          'User-Agent': 'Mozilla/5.0 Figma Plugin'
-        },
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'        },
       });
       
       if (!response.ok) {
@@ -64,13 +63,12 @@ async function extractStylesFromUrl(url: string): Promise<StyleData> {
       break;
     } catch (error) {
       console.error(`CORS proxy ${i+1} failed:`, error);
-      lastError = error instanceof Error ? error : new Error(String(error));
+      lastError = error as Error;
       
-      if (i === corsProxies.length - 1) {
-        throw new Error(`All CORS proxy's failed: ${lastError.message}`);
+      // If this is the last proxy and it failed, throw the error
+      if (i === corsProxies.length - 1 && lastError) {
+        throw lastError;
       }
-      
-      continue;
     }
   }
   
@@ -138,40 +136,35 @@ async function extractStylesFromUrl(url: string): Promise<StyleData> {
   const fontWeightRegex = /font-weight\s*:\s*([^;"}]+)/gi;
   const lineHeightRegex = /line-height\s*:\s*([^;"}]+)/gi;
 
-  let fonts: string[] = [];
-  let fontSizes: string[] = [];
-  let fontWeights: string[] = [];
-  let lineHeights: string[] = [];
-
-  let match;
-  while ((match = fontFamilyRegex.exec(html)) !== null) {
-    fonts.push(match[1].trim());
-  }
-
-  while ((match = fontSizeRegex.exec(html)) !== null) {
-    fontSizes.push(match[1].trim());
-  }
-
-  while ((match = fontWeightRegex.exec(html)) !== null) {
-    fontWeights.push(match[1].trim());
-  }
-
-  while ((match = lineHeightRegex.exec(html)) !== null) {
-    lineHeights.push(match[1].trim());
-  }
+  const fontFamilyMatches = html.match(fontFamilyRegex) || [];
+  const fontSizeMatches = html.match(fontSizeRegex) || [];
+  
+  // Extract font family values
+  const fontFamilies = fontFamilyMatches.map(match => {
+    const value = match.split(':')[1].trim();
+    return value;
+  });
+  
+  // Extract font size values
+  const fontSizes = fontSizeMatches.map(match => {
+    const value = match.split(':')[1].trim();
+    return value;
+  });
+  
+  // Remove duplicates
+  const uniqueFontFamilies = [...new Set(fontFamilies)];
+  const uniqueFontSizes = [...new Set(fontSizes)];
 
   // Combine all colors and remove duplicates
   const allColors = [...uppercaseHexColors, ...convertedRgbColors, ...convertedRgbaColors];
 
   // Make extracted data unique
   const uniqueColors = [...new Set(allColors)];
-  const uniqueFonts = [...new Set(fonts)];
-  const uniqueFontSizes = [...new Set(fontSizes)];
 
   // Create frame from style data
-  await createFramesFromStyles({ colors: uniqueColors, fonts: uniqueFonts, fontSizes: uniqueFontSizes, gradients: filteredGradients }, url, pageTitle);
+  await createFramesFromStyles({ colors: uniqueColors, fonts: uniqueFontFamilies, fontSizes: uniqueFontSizes, gradients: filteredGradients }, url, pageTitle);
 
-  return { colors: uniqueColors, fonts: uniqueFonts, fontSizes: uniqueFontSizes, gradients: filteredGradients };
+  return { colors: uniqueColors, fonts: uniqueFontFamilies, fontSizes: uniqueFontSizes, gradients: filteredGradients };
 }
 
 /**
@@ -1325,8 +1318,6 @@ function extractGradientColors(gradientStr: string): string[] {
     return !isDirection && hasColor;
   });
 
-  console.log(colorStops);
-  
   // Extract just the color part from each stop
   return colorStops.map(stop => {
     // Extract color from "color position" format (e.g., "red 10%")
@@ -1336,7 +1327,6 @@ function extractGradientColors(gradientStr: string): string[] {
     // Convert to hex if it's in rgba format
     if (colorValue.toLowerCase().startsWith('rgb')) {
       try {
-      console.log(colorValue);
         return rgbaToHex(colorValue);
       } catch (e) {
         console.log('Error converting RGB to hex:', colorValue);
