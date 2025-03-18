@@ -9,3 +9,7 @@ package-lock.json
 .cursorrules
 dist/
 
+# macOS system files
+.DS_Store
+**/.DS_Store
+
