@@ -1,17 +1,15 @@
 {
   "name": "Style Finder",
-  "id": "unique-style-finder-plugin-id",
+  "id": "1483637328459387065",
   "editorType": ["figma"],
   "api": "1.0.0",
   "main": "dist/code.js",
   "ui": "dist/ui.html",
   "networkAccess": {
     "allowedDomains": [
-      "https://corsproxy.io",
-      "https://api.allorigins.win",
-      "https://cors-anywhere.herokuapp.com",
-      "*"
+       "https://style-finder-api-x1ur.onrender.com"
     ],
     "reasoning": "The plugin needs to fetch style information from user-provided websites to extract colors, fonts, and other design elements. The wildcard is needed to allow users to scan any website for style information."
-  }
+  },
+  "documentAccess": "dynamic-page"
 }
