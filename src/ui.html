@@ -151,6 +151,34 @@
             flex: 1;
         }
 
+        /* Loading spinner styles */
+        .spinner {
+            display: none;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+            margin-left: 8px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Button with spinner layout */
+        #extractBtn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Disabled button style */
+        #extractBtn:disabled {
+            opacity: 0.7;
+        }
+
     </style>
     <!-- JS dosyaları HTML içine gömülecek, ancak TypeScript olarak etiket koymuyoruz -->
   </head>
@@ -743,38 +771,13 @@
                 </div>
                 <input type="text" id="websiteUrl" class="input-field" value="https://pixsel.studio" placeholder="https://pixsel.studio">
             </div>
-            <button id="extractBtn">Get Styles</button>
+            <button id="extractBtn">Get Styles <span class="spinner" id="loadingSpinner"></span></button>
         </div>
       </div>
       
     </div>
 
-    <script>
-      const svgUrl = './assets/header-logo.svg';
-      fetch(svgUrl)
-        .then(response => {
-          return response.text()
-        })
-        .then(svgContent => {
-          figma.clientStorage.setAsync('headerLogoSvg', svgContent);
-        })
-        .catch(error => {
-          console.error('Error occurred while reading SVG file:', error);
-        });
-
-      window.onmessage = (event) => {
-        const message = event.data.pluginMessage;
-        
-        if (message.type === 'validation-error') {
-          const inputElement = document.getElementById('websiteUrl');
-          inputElement.style.border = '1px solid #FF4545';
-          
-          // Reset border after 2 seconds
-          setTimeout(() => {
-            inputElement.style.border = '1px solid #363636';
-          }, 2000);
-        }
-      };
-    </script>
+    <!-- Inline komut dosyasını kaldırıyorum çünkü ui.ts'deki kodla çakışıyor -->
+    <!-- Buradaki fonksiyonelliği ui.ts içinde birleştireceğiz -->
   </body>
 </html>
